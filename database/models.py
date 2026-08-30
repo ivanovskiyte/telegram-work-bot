@@ -13,4 +13,4 @@ class User(Base):
     telegram_id: Mapped[int] = mapped_column(Integer, unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     role: Mapped[str] = mapped_column(String(20), nullable=False)
-    fuel_consumption: Mapped[float] = mapped_column(Float, nullable=False)
+    fuel_consumption: Mapped[float | None] = mapped_column(Float, nullable=True)

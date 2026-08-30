@@ -16,7 +16,7 @@ async def create_user(
     telegram_id: int,
     name: str,
     role: str,
-    fuel_consumption: float,
+    fuel_consumption: float | None = None,
 ) -> User:
     async with async_session() as session:
         user = User(
@@ -31,3 +31,15 @@ async def create_user(
         await session.refresh(user)
 
         return user
+
+async def delete_user_by_telegram_id(telegram_id: int) -> bool:
+    async with async_session() as session:
+        user = await get_user_by_telegram_id(telegram_id)
+
+        if user is None:
+            return False
+
+        await session.delete(user)
+        await session.commit()
+
+        return True
