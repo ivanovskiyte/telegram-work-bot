@@ -1,4 +1,5 @@
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from database.models import Base
 
 
 DATABASE_URL = "sqlite+aiosqlite:///data/bot.db"
@@ -12,6 +13,6 @@ async_session = async_sessionmaker(
 )
 
 
-async def check_database():
+async def create_tables():
     async with engine.begin() as connection:
-        await connection.run_sync(lambda _: None)
+        await connection.run_sync(Base.metadata.create_all)
