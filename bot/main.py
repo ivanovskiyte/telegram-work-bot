@@ -3,6 +3,7 @@ import os
 
 from aiogram import Bot, Dispatcher
 from dotenv import load_dotenv
+from bot.handlers import router
 
 
 load_dotenv()
@@ -16,6 +17,7 @@ if not BOT_TOKEN:
 async def main():
     bot = Bot(token=BOT_TOKEN)
     dp = Dispatcher()
+    dp.include_router(router)
 
     await bot.delete_webhook(drop_pending_updates=True)
 
