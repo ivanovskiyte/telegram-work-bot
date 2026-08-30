@@ -65,7 +65,7 @@ def additional_keyboard() -> ReplyKeyboardMarkup:
         keyboard=[
             [
                 KeyboardButton(text="Администратор"),
-                KeyboardButton(text="Просмотр"),
+                KeyboardButton(text="Офис"),
             ],
             [
                 KeyboardButton(text="Назад"),

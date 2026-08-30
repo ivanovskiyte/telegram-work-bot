@@ -45,8 +45,8 @@ async def cmd_start(message: Message, state: FSMContext):
         keyboard = ReplyKeyboardMarkup(
             keyboard=[
                 [
-                    KeyboardButton(text="Оператор"),
-                    KeyboardButton(text="Просмотр"),
+                    KeyboardButton(text="Инженер"),
+                    KeyboardButton(text="Офис"),
                 ]
             ],
             resize_keyboard=True,
@@ -105,7 +105,7 @@ async def show_main_menu(message: Message, user):
 
 @router.message(RegistrationStates.choosing_role)
 async def process_role_choice(message: Message, state: FSMContext):
-    if message.text == "Просмотр":
+    if message.text == "Офис":
         user = await create_user(
             telegram_id=message.from_user.id,
             name=message.from_user.full_name,
@@ -123,9 +123,9 @@ async def process_role_choice(message: Message, state: FSMContext):
         await show_main_menu(message, user)
         return
 
-    if message.text == "Оператор":
+    if message.text == "Инженер":
         await message.answer(
-            "Вы выбрали тип учётной записи: Оператор.\n"
+            "Вы выбрали тип учётной записи: Инженер.\n"
             "Введите ваш расход топлива в л/100 км:"
         )
 
@@ -396,14 +396,14 @@ async def change_role_get_id(message: Message, state: FSMContext):
         f"Роль: {user.role}\n"
         f"Расход: {user.fuel_consumption}\n\n"
         "Выберите новую роль:\n"
-        "Оператор или Просмотр"
+        "Инженер или Офис"
     )
 
     await state.set_state(AdminStates.selecting_new_role)
 
 @router.message(AdminStates.selecting_new_role)
 async def change_role_select(message: Message, state: FSMContext):
-    if message.text not in ("Оператор", "Просмотр"):
+    if message.text not in ("Инженер", "Офис"):
         await state.clear()
 
         await message.answer(
@@ -413,7 +413,7 @@ async def change_role_select(message: Message, state: FSMContext):
         )
         return
 
-    new_role = "operator" if message.text == "Оператор" else "viewer"
+    new_role = "operator" if message.text == "Инженер" else "viewer"
 
     await state.update_data(new_role=new_role)
 
@@ -430,7 +430,7 @@ async def change_role_select(message: Message, state: FSMContext):
     await state.update_data(new_fuel_consumption=None)
 
     await message.answer(
-        "Новая роль: Просмотр\n"
+        "Новая роль: Офис\n"
         "Расход: не используется.\n\n"
         "Подтвердить изменение?\n"
         "Ответьте «Да» или «Нет»."
@@ -470,7 +470,7 @@ async def change_role_fuel_consumption(
     )
 
     await message.answer(
-        f"Новая роль: Оператор\n"
+        f"Новая роль: Инженер\n"
         f"Новый расход: {fuel_consumption} л/100 км.\n\n"
         "Подтвердить изменение?\n"
         "Ответьте «Да» или «Нет»."
