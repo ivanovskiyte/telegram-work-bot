@@ -14,3 +14,10 @@ class User(Base):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     role: Mapped[str] = mapped_column(String(20), nullable=False)
     fuel_consumption: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+class MileageSetting(Base):
+    __tablename__ = "mileage_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    workplace: Mapped[str] = mapped_column(String(200), unique=True, nullable=False)
+    mileage: Mapped[float] = mapped_column(Float, nullable=False)
