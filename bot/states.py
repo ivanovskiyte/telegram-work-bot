@@ -17,3 +17,13 @@ class AdminStates(StatesGroup):
     adding_mileage_value = State()
     deleting_mileage = State()
     confirming_mileage_deletion = State()
+
+class DailyReportStates(StatesGroup):
+    entering_workplace = State()
+    confirming_mileage = State()
+    entering_mileage = State()
+    answering_refueling = State()
+    entering_fuel_liters = State()
+    entering_fuel_amount = State()
+    entering_work_description = State()
+    answering_work_completed = State()

@@ -14,7 +14,7 @@ from database.queries import (
     get_all_mileage_settings,
     delete_mileage_setting,
 )
-from bot.states import RegistrationStates, AdminStates
+from bot.states import RegistrationStates, AdminStates, DailyReportStates
 from bot.keyboards import (
     admin_keyboard,
     operator_keyboard,
@@ -793,6 +793,297 @@ async def delete_mileage_confirm(
             "Не удалось удалить настройку.",
             reply_markup=mileage_settings_keyboard(),
         )    
+
+
+
+
+
+# =========================
+# ОТЧЕТ ЗА ДЕНЬ
+# =========================
+
+# Обработчик отчет за день
+@router.message(lambda message: message.text == "Отчет за день")
+async def daily_report_start(message: Message, state: FSMContext):
+    user = await get_user_by_telegram_id(message.from_user.id)
+
+    if user is None or user.role not in ("operator", "administrator"):
+        return
+
+    await message.answer(
+        "Где был сегодня?"
+    )
+
+    await state.set_state(
+        DailyReportStates.entering_workplace
+    )
+
+#Обработчик Где был
+@router.message(DailyReportStates.entering_workplace)
+async def daily_report_workplace(
+    message: Message,
+    state: FSMContext,
+):
+    workplace = message.text.strip()
+
+    if not workplace:
+        await message.answer(
+            "Место работы не может быть пустым."
+        )
+        return
+
+    mileage_setting = await get_mileage_setting(workplace)
+
+    await state.update_data(
+        workplace=workplace
+    )
+
+    if mileage_setting is not None:
+        await state.update_data(
+            mileage=mileage_setting.mileage
+        )
+
+        await message.answer(
+            f"Для места «{mileage_setting.workplace}» "
+            f"найден километраж: {mileage_setting.mileage} км.\n\n"
+            "Подтверждаете? Ответьте «Да» или «Нет»."
+        )
+
+        await state.set_state(
+            DailyReportStates.confirming_mileage
+        )
+        return
+
+    await message.answer(
+        "Место не найдено в настройках.\n"
+        "Сколько проехал?"
+    )
+
+    await state.set_state(
+        DailyReportStates.entering_mileage
+    )
+
+#Обработчик подтверждения пробега
+@router.message(DailyReportStates.confirming_mileage)
+async def daily_report_confirm_mileage(
+    message: Message,
+    state: FSMContext,
+):
+    if message.text == "Да":
+        await message.answer(
+            "Заправлялся? Ответьте «Да» или «Нет»."
+        )
+
+        await state.set_state(
+            DailyReportStates.answering_refueling
+        )
+        return
+
+    if message.text == "Нет":
+        await message.answer(
+            "Сколько проехал?"
+        )
+
+        await state.set_state(
+            DailyReportStates.entering_mileage
+        )
+        return
+
+    await message.answer(
+        "Пожалуйста, ответьте «Да» или «Нет»."
+    )
+
+#Обработчик ввода километража
+@router.message(DailyReportStates.entering_mileage)
+async def daily_report_mileage(
+    message: Message,
+    state: FSMContext,
+):
+    try:
+        mileage = float(
+            message.text.replace(",", ".")
+        )
+    except (ValueError, AttributeError):
+        await message.answer(
+            "Введите километраж числом, например: 120"
+        )
+        return
+
+    if mileage < 0:
+        await message.answer(
+            "Километраж не может быть отрицательным."
+        )
+        return
+
+    await state.update_data(
+        mileage=mileage
+    )
+
+    await message.answer(
+        "Заправлялся? Ответьте «Да» или «Нет»."
+    )
+
+    await state.set_state(
+        DailyReportStates.answering_refueling
+    )
+
+#Обработчик заправки
+@router.message(DailyReportStates.answering_refueling)
+async def daily_report_refueling(
+    message: Message,
+    state: FSMContext,
+):
+    if message.text == "Да":
+        await message.answer(
+            "Сколько литров?"
+        )
+
+        await state.set_state(
+            DailyReportStates.entering_fuel_liters
+        )
+        return
+
+    if message.text == "Нет":
+        await message.answer(
+            "Что делал?"
+        )
+
+        await state.set_state(
+            DailyReportStates.entering_work_description
+        )
+        return
+
+    await message.answer(
+        "Пожалуйста, ответьте «Да» или «Нет»."
+    )
+
+#Обработчик количества литров
+@router.message(DailyReportStates.entering_fuel_liters)
+async def daily_report_fuel_liters(
+    message: Message,
+    state: FSMContext,
+):
+    try:
+        liters = int(message.text)
+    except (ValueError, TypeError):
+        await message.answer(
+            "Введите целое число литров."
+        )
+        return
+
+    if liters <= 0:
+        await message.answer(
+            "Количество литров должно быть больше нуля."
+        )
+        return
+
+    await state.update_data(
+        fuel_liters=liters
+    )
+
+    await message.answer(
+        "На какую сумму?"
+    )
+
+    await state.set_state(
+        DailyReportStates.entering_fuel_amount
+    )
+
+#Обработчик суммы заправки
+@router.message(DailyReportStates.entering_fuel_amount)
+async def daily_report_fuel_amount(
+    message: Message,
+    state: FSMContext,
+):
+    try:
+        amount = float(
+            message.text.replace(",", ".")
+        )
+    except (ValueError, AttributeError):
+        await message.answer(
+            "Введите сумму числом, например: 3500.50"
+        )
+        return
+
+    if amount <= 0:
+        await message.answer(
+            "Сумма должна быть больше нуля."
+        )
+        return
+
+    await state.update_data(
+        fuel_amount=amount
+    )
+
+    await message.answer(
+        "Что делал?"
+    )
+
+    await state.set_state(
+        DailyReportStates.entering_work_description
+    )
+
+#Обработчик описания работ
+@router.message(DailyReportStates.entering_work_description)
+async def daily_report_work_description(
+    message: Message,
+    state: FSMContext,
+):
+    description = message.text.strip()
+
+    if not description:
+        await message.answer(
+            "Описание работы не может быть пустым."
+        )
+        return
+
+    if len(description) > 200:
+        await message.answer(
+            "Описание работы не должно превышать 200 символов.\n"
+            "Попробуйте ещё раз."
+        )
+        return
+
+    await state.update_data(
+        work_description=description
+    )
+
+    await message.answer(
+        "Работа выполнена? Заявка закрывается?\n"
+        "Ответьте «Да» или «Нет»."
+    )
+
+    await state.set_state(
+        DailyReportStates.answering_work_completed
+    )
+
+#Закрытие заявки
+@router.message(DailyReportStates.answering_work_completed)
+async def daily_report_work_completed(
+    message: Message,
+    state: FSMContext,
+):
+    if message.text == "Да":
+        await state.clear()
+
+        await message.answer(
+            "Отчет за день принят."
+        )
+        return
+
+    if message.text == "Нет":
+        await state.clear()
+
+        await message.answer(
+            "Ты справишься"
+        )
+        return
+
+    await message.answer(
+        "Пожалуйста, ответьте «Да» или «Нет»."
+    )
+
+
 
 
 
