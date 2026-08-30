@@ -20,6 +20,7 @@ class AdminStates(StatesGroup):
 
 class DailyReportStates(StatesGroup):
     entering_workplace = State()
+    asking_out_of_town = State()
     confirming_mileage = State()
     entering_mileage = State()
     answering_refueling = State()
@@ -27,3 +28,4 @@ class DailyReportStates(StatesGroup):
     entering_fuel_amount = State()
     entering_work_description = State()
     answering_work_completed = State()
+    asking_additional_report = State()

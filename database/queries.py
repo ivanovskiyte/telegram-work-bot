@@ -1,8 +1,8 @@
 from sqlalchemy import select
-
+from datetime import date
 
 from database.db import async_session
-from database.models import User, MileageSetting
+from database.models import User, MileageSetting, DailyReport
 
 
 async def get_user_by_telegram_id(telegram_id: int) -> User | None:
@@ -136,3 +136,35 @@ async def delete_mileage_setting(
                 return True
 
         return False
+
+async def create_daily_report(
+    user_id: int,
+    report_date: date,
+    workplace: str,
+    mileage: float,
+    refueled: bool,
+    fuel_liters: float | None,
+    fuel_amount: float | None,
+    work_description: str,
+    work_completed: bool,
+    is_out_of_town: bool,
+) -> DailyReport:
+    async with async_session() as session:
+        report = DailyReport(
+            user_id=user_id,
+            report_date=report_date,
+            workplace=workplace,
+            mileage=mileage,
+            refueled=refueled,
+            fuel_liters=fuel_liters,
+            fuel_amount=fuel_amount,
+            work_description=work_description,
+            work_completed=work_completed,
+            is_out_of_town=is_out_of_town,
+        )
+
+        session.add(report)
+        await session.commit()
+        await session.refresh(report)
+
+        return report

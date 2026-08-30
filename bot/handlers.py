@@ -2,6 +2,7 @@ from aiogram import Router
 from aiogram.filters import CommandStart
 from aiogram.types import Message
 from aiogram.fsm.context import FSMContext
+from datetime import date
 
 from database.queries import (
     get_user_by_telegram_id,
@@ -13,8 +14,11 @@ from database.queries import (
     get_mileage_setting,
     get_all_mileage_settings,
     delete_mileage_setting,
+    create_daily_report,
 )
+
 from bot.states import RegistrationStates, AdminStates, DailyReportStates
+
 from bot.keyboards import (
     admin_keyboard,
     operator_keyboard,
@@ -832,35 +836,77 @@ async def daily_report_workplace(
         )
         return
 
-    mileage_setting = await get_mileage_setting(workplace)
-
     await state.update_data(
         workplace=workplace
     )
 
-    if mileage_setting is not None:
+    await message.answer(
+        "Это загород?"
+    )
+
+    await state.set_state(
+        DailyReportStates.asking_out_of_town
+    )
+
+#Обработчик загород
+@router.message(DailyReportStates.asking_out_of_town)
+async def daily_report_out_of_town(
+    message: Message,
+    state: FSMContext,
+):
+    if message.text == "Нет":
         await state.update_data(
-            mileage=mileage_setting.mileage
+            mileage=0,
+            is_out_of_town=False,
         )
 
         await message.answer(
-            f"Для места «{mileage_setting.workplace}» "
-            f"найден километраж: {mileage_setting.mileage} км.\n\n"
-            "Подтверждаете? Ответьте «Да» или «Нет»."
+            "Заправлялся? Ответьте «Да» или «Нет»."
         )
 
         await state.set_state(
-            DailyReportStates.confirming_mileage
+            DailyReportStates.answering_refueling
+        )
+        return
+
+    if message.text == "Да":
+        await state.update_data(
+            is_out_of_town=True,
+        )
+
+        data = await state.get_data()
+        workplace = data["workplace"]
+
+        mileage_setting = await get_mileage_setting(workplace)
+
+        if mileage_setting is not None:
+            await state.update_data(
+                mileage=mileage_setting.mileage
+            )
+
+            await message.answer(
+                f"Для места «{mileage_setting.workplace}» "
+                f"найден километраж: {mileage_setting.mileage} км.\n\n"
+                "Подтверждаете? Ответьте «Да» или «Нет»."
+            )
+
+            await state.set_state(
+                DailyReportStates.confirming_mileage
+            )
+            return
+
+        await message.answer(
+            "Место не найдено в настройках.\n"
+            "Сколько проехал?"
+        )
+
+        await state.set_state(
+            DailyReportStates.entering_mileage
         )
         return
 
     await message.answer(
-        "Место не найдено в настройках.\n"
-        "Сколько проехал?"
-    )
-
-    await state.set_state(
-        DailyReportStates.entering_mileage
+        "Пожалуйста, ответьте «Да» или «Нет»."
     )
 
 #Обработчик подтверждения пробега
@@ -934,6 +980,10 @@ async def daily_report_refueling(
     state: FSMContext,
 ):
     if message.text == "Да":
+        await state.update_data(
+            refueled=True
+        )
+
         await message.answer(
             "Сколько литров?"
         )
@@ -944,6 +994,12 @@ async def daily_report_refueling(
         return
 
     if message.text == "Нет":
+        await state.update_data(
+            refueled=False,
+            fuel_liters=None,
+            fuel_amount=None,
+        )
+
         await message.answer(
             "Что делал?"
         )
@@ -956,7 +1012,7 @@ async def daily_report_refueling(
     await message.answer(
         "Пожалуйста, ответьте «Да» или «Нет»."
     )
-
+    
 #Обработчик количества литров
 @router.message(DailyReportStates.entering_fuel_liters)
 async def daily_report_fuel_liters(
@@ -1063,20 +1119,89 @@ async def daily_report_work_completed(
     message: Message,
     state: FSMContext,
 ):
-    if message.text == "Да":
+    if message.text not in ("Да", "Нет"):
+        await message.answer(
+            "Пожалуйста, ответьте «Да» или «Нет»."
+        )
+        return
+
+    data = await state.get_data()
+
+    user = await get_user_by_telegram_id(
+        message.from_user.id
+    )
+
+    if user is None:
         await state.clear()
 
         await message.answer(
-            "Отчет за день принят."
+            "Пользователь не найден. Отчет не сохранен."
+        )
+        return
+
+    report = await create_daily_report(
+        user_id=user.id,
+        report_date=date.today(),
+        workplace=data["workplace"],
+        mileage=data["mileage"],
+        is_out_of_town=data["is_out_of_town"],
+        refueled=data.get("refueled", False),
+        fuel_liters=data.get("fuel_liters"),
+        fuel_amount=data.get("fuel_amount"),
+        work_description=data["work_description"],
+        work_completed=message.text == "Да",
+    )
+
+    await message.answer(
+    "Отчёт сохранён.\n\n"
+    "Добавить ещё один отчёт?"
+    )
+
+    await state.set_state(
+        DailyReportStates.asking_additional_report
+    )
+
+#Обработчмк множественных отчетов
+@router.message(DailyReportStates.asking_additional_report)
+async def daily_report_additional_report(
+    message: Message,
+    state: FSMContext,
+):
+    if message.text == "Да":
+        await message.answer(
+            "Где был?"
+        )
+
+        await state.set_state(
+            DailyReportStates.entering_workplace
         )
         return
 
     if message.text == "Нет":
         await state.clear()
 
-        await message.answer(
-            "Ты справишься"
+        user = await get_user_by_telegram_id(
+          message.from_user.id
         )
+
+        if user is not None:
+            if user.role == "administrator":
+                keyboard = admin_keyboard()
+            elif user.role == "operator":
+                keyboard = operator_keyboard()
+            else:
+                keyboard = viewer_keyboard()
+
+            await message.answer(
+                "Отчёты за день завершены.",
+                reply_markup=keyboard,
+            )
+            return
+
+        await message.answer(
+            "Отчёты за день завершены."
+        )
+
         return
 
     await message.answer(
