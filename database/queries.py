@@ -137,6 +137,40 @@ async def delete_mileage_setting(
 
         return False
 
+async def consume_fuel_fifo(
+    user_id: int,
+    fuel_consumed: float,
+) -> None:
+    if fuel_consumed <= 0:
+        return
+
+    async with async_session() as session:
+        result = await session.execute(
+            select(FuelBatch)
+            .where(
+                FuelBatch.user_id == user_id,
+                FuelBatch.remaining_liters > 0,
+            )
+            .order_by(FuelBatch.id)
+        )
+        batches = result.scalars().all()
+
+        remaining_to_consume = fuel_consumed
+
+        for batch in batches:
+            if remaining_to_consume <= 0:
+                break
+
+            consumed_from_batch = min(
+                batch.remaining_liters,
+                remaining_to_consume,
+            )
+
+            batch.remaining_liters -= consumed_from_batch
+            remaining_to_consume -= consumed_from_batch
+
+        await session.commit()
+
 async def create_daily_report(
     user_id: int,
     report_date: date,
@@ -196,6 +230,31 @@ async def create_daily_report(
             )
 
             session.add(fuel_batch)
+            
+        if fuel_consumed > 0:
+            result = await session.execute(
+                select(FuelBatch)
+                .where(
+                    FuelBatch.user_id == user_id,
+                    FuelBatch.remaining_liters > 0,
+                )
+                .order_by(FuelBatch.id)
+            )
+            batches = result.scalars().all()
+
+            remaining_to_consume = fuel_consumed
+
+            for batch in batches:
+                if remaining_to_consume <= 0:
+                    break
+
+                consumed_from_batch = min(
+                    batch.remaining_liters,
+                    remaining_to_consume,
+                )
+
+                batch.remaining_liters -= consumed_from_batch
+                remaining_to_consume -= consumed_from_batch
 
         await session.commit()
         await session.refresh(report)
