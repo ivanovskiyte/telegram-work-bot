@@ -2,7 +2,7 @@ from sqlalchemy import select
 from datetime import date
 
 from database.db import async_session
-from database.models import User, MileageSetting, DailyReport, FuelBatch
+from database.models import User, MileageSetting, DailyReport, FuelBatch, FuelConsumptionAllocation
 
 
 async def get_user_by_telegram_id(telegram_id: int) -> User | None:
@@ -138,38 +138,52 @@ async def delete_mileage_setting(
         return False
 
 async def consume_fuel_fifo(
+    session,
     user_id: int,
+    daily_report_id: int,
     fuel_consumed: float,
 ) -> None:
     if fuel_consumed <= 0:
         return
 
-    async with async_session() as session:
-        result = await session.execute(
-            select(FuelBatch)
-            .where(
-                FuelBatch.user_id == user_id,
-                FuelBatch.remaining_liters > 0,
-            )
-            .order_by(FuelBatch.id)
+    result = await session.execute(
+        select(FuelBatch)
+        .where(
+            FuelBatch.user_id == user_id,
+            FuelBatch.remaining_liters > 0,
         )
-        batches = result.scalars().all()
+        .order_by(FuelBatch.id)
+    )
+    batches = result.scalars().all()
 
-        remaining_to_consume = fuel_consumed
+    remaining_to_consume = fuel_consumed
 
-        for batch in batches:
-            if remaining_to_consume <= 0:
-                break
+    for batch in batches:
+        if remaining_to_consume <= 0:
+            break
 
-            consumed_from_batch = min(
-                batch.remaining_liters,
-                remaining_to_consume,
-            )
+        consumed_from_batch = min(
+            batch.remaining_liters,
+            remaining_to_consume,
+        )
 
-            batch.remaining_liters -= consumed_from_batch
-            remaining_to_consume -= consumed_from_batch
+        cost = round(
+            consumed_from_batch * batch.price_per_liter,
+            2,
+        )
 
-        await session.commit()
+        batch.remaining_liters -= consumed_from_batch
+
+        allocation = FuelConsumptionAllocation(
+            daily_report_id=daily_report_id,
+            fuel_batch_id=batch.id,
+            liters=consumed_from_batch,
+            cost=cost,
+        )
+
+        session.add(allocation)
+
+        remaining_to_consume -= consumed_from_batch
 
 async def create_daily_report(
     user_id: int,
@@ -230,31 +244,16 @@ async def create_daily_report(
             )
 
             session.add(fuel_batch)
-            
+            await session.flush()
+
         if fuel_consumed > 0:
-            result = await session.execute(
-                select(FuelBatch)
-                .where(
-                    FuelBatch.user_id == user_id,
-                    FuelBatch.remaining_liters > 0,
-                )
-                .order_by(FuelBatch.id)
+            await consume_fuel_fifo(
+                session=session,
+                user_id=user_id,
+                daily_report_id=report.id,
+                fuel_consumed=fuel_consumed,
             )
-            batches = result.scalars().all()
-
-            remaining_to_consume = fuel_consumed
-
-            for batch in batches:
-                if remaining_to_consume <= 0:
-                    break
-
-                consumed_from_batch = min(
-                    batch.remaining_liters,
-                    remaining_to_consume,
-                )
-
-                batch.remaining_liters -= consumed_from_batch
-                remaining_to_consume -= consumed_from_batch
+        
 
         await session.commit()
         await session.refresh(report)
