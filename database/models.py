@@ -122,3 +122,28 @@ class FuelBatch(Base):
         Float,
         nullable=False,
     )
+
+class FuelConsumptionAllocation(Base):
+    __tablename__ = "fuel_consumption_allocations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    daily_report_id: Mapped[int] = mapped_column(
+        ForeignKey("daily_reports.id"),
+        nullable=False,
+    )
+
+    fuel_batch_id: Mapped[int] = mapped_column(
+        ForeignKey("fuel_batches.id"),
+        nullable=False,
+    )
+
+    liters: Mapped[float] = mapped_column(
+        Float,
+        nullable=False,
+    )
+
+    cost: Mapped[float] = mapped_column(
+        Float,
+        nullable=False,
+    )
