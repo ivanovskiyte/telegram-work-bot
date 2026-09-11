@@ -1,4 +1,4 @@
-from sqlalchemy import Float, Integer, String, Boolean, Date
+from sqlalchemy import Float, Integer, String, Boolean, Date, ForeignKey
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from datetime import date
 
@@ -76,4 +76,49 @@ class DailyReport(Base):
     is_out_of_town: Mapped[bool] = mapped_column(
     Boolean,
     nullable=False,
-)
+    )
+
+    fuel_consumption_rate: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+    )
+
+    fuel_consumed: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+    )
+
+class FuelBatch(Base):
+    __tablename__ = "fuel_batches"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id"),
+        nullable=False,
+    )
+
+    daily_report_id: Mapped[int] = mapped_column(
+        ForeignKey("daily_reports.id"),
+        nullable=False,
+    )
+
+    liters: Mapped[float] = mapped_column(
+        Float,
+        nullable=False,
+    )
+
+    amount: Mapped[float] = mapped_column(
+        Float,
+        nullable=False,
+    )
+
+    price_per_liter: Mapped[float] = mapped_column(
+        Float,
+        nullable=False,
+    )
+
+    remaining_liters: Mapped[float] = mapped_column(
+        Float,
+        nullable=False,
+    )

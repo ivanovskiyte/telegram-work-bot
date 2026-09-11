@@ -150,6 +150,21 @@ async def create_daily_report(
     is_out_of_town: bool,
 ) -> DailyReport:
     async with async_session() as session:
+        result = await session.execute(
+            select(User).where(User.id == user_id)
+        )
+        user = result.scalar_one_or_none()
+
+        if user is None:
+            raise ValueError(f"User with id {user_id} not found")
+
+        fuel_consumption_rate = user.fuel_consumption
+
+        if is_out_of_town and fuel_consumption_rate is not None:
+            fuel_consumed = mileage * fuel_consumption_rate / 100
+        else:
+            fuel_consumed = 0.0
+
         report = DailyReport(
             user_id=user_id,
             report_date=report_date,
@@ -161,6 +176,8 @@ async def create_daily_report(
             work_description=work_description,
             work_completed=work_completed,
             is_out_of_town=is_out_of_town,
+            fuel_consumption_rate=fuel_consumption_rate,
+            fuel_consumed=fuel_consumed,
         )
 
         session.add(report)
