@@ -2,7 +2,7 @@ from sqlalchemy import select
 from datetime import date
 
 from database.db import async_session
-from database.models import User, MileageSetting, DailyReport
+from database.models import User, MileageSetting, DailyReport, FuelBatch
 
 
 async def get_user_by_telegram_id(telegram_id: int) -> User | None:
@@ -181,6 +181,22 @@ async def create_daily_report(
         )
 
         session.add(report)
+        await session.flush()
+
+        if refueled and fuel_liters is not None and fuel_amount is not None:
+            price_per_liter = round(fuel_amount / fuel_liters, 2)
+
+            fuel_batch = FuelBatch(
+                user_id=user_id,
+                daily_report_id=report.id,
+                liters=fuel_liters,
+                amount=fuel_amount,
+                price_per_liter=price_per_liter,
+                remaining_liters=fuel_liters,
+            )
+
+            session.add(fuel_batch)
+
         await session.commit()
         await session.refresh(report)
 
