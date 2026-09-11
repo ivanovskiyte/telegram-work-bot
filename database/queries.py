@@ -137,6 +137,74 @@ async def delete_mileage_setting(
 
         return False
 
+async def cover_fuel_debt(
+    session,
+    user_id: int,
+    fuel_batch_id: int,
+) -> None:
+    batch_result = await session.execute(
+        select(FuelBatch).where(
+            FuelBatch.id == fuel_batch_id
+        )
+    )
+    batch = batch_result.scalar_one()
+
+    result = await session.execute(
+        select(DailyReport)
+        .where(
+            DailyReport.user_id == user_id,
+            DailyReport.fuel_consumed > 0,
+            DailyReport.id != batch.daily_report_id,
+        )
+        .order_by(DailyReport.id)
+    )
+    reports = result.scalars().all()
+
+    for report in reports:
+        if batch.remaining_liters <= 0:
+            break
+
+        allocated_result = await session.execute(
+            select(FuelConsumptionAllocation)
+            .where(
+                FuelConsumptionAllocation.daily_report_id == report.id
+            )
+        )
+        allocations = allocated_result.scalars().all()
+
+        allocated_liters = sum(
+            allocation.liters for allocation in allocations
+        )
+
+        debt = round(
+            (report.fuel_consumed or 0) - allocated_liters,
+            2,
+        )
+
+        if debt <= 0:
+            continue
+
+        covered_liters = min(
+            debt,
+            batch.remaining_liters,
+        )
+
+        cost = round(
+            covered_liters * batch.price_per_liter,
+            2,
+        )
+
+        batch.remaining_liters -= covered_liters
+
+        allocation = FuelConsumptionAllocation(
+            daily_report_id=report.id,
+            fuel_batch_id=batch.id,
+            liters=covered_liters,
+            cost=cost,
+        )
+
+        session.add(allocation)
+
 async def consume_fuel_fifo(
     session,
     user_id: int,
@@ -245,6 +313,12 @@ async def create_daily_report(
 
             session.add(fuel_batch)
             await session.flush()
+
+            await cover_fuel_debt(
+                session=session,
+                user_id=user_id,
+                fuel_batch_id=fuel_batch.id,
+            )
 
         if fuel_consumed > 0:
             await consume_fuel_fifo(
